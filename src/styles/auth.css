@@ -1,0 +1,181 @@
+/* Authentication related styles */
+
+/* Auth container */
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - var(--navbar-height) - var(--footer-height));
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+  
+  .auth-card {
+    background-color: white;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 450px;
+    padding: var(--spacing-xl);
+  }
+  
+  .auth-header {
+    text-align: center;
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .auth-header h2 {
+    font-size: var(--font-size-2xl);
+    color: #333;
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .auth-header p {
+    color: var(--secondary-color);
+  }
+  
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    margin: var(--spacing-lg) 0;
+    color: var(--secondary-color);
+  }
+  
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: #eee;
+  }
+  
+  .auth-divider span {
+    padding: 0 var(--spacing-sm);
+    font-size: var(--font-size-small);
+  }
+  
+  .auth-footer {
+    text-align: center;
+    margin-top: var(--spacing-lg);
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+  }
+  
+  .forgot-password {
+    text-align: right;
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-small);
+  }
+  
+  .reset-password {
+    margin-top: var(--spacing-md);
+  }
+  
+  .reset-success {
+    text-align: center;
+  }
+  
+  .button-group {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
+  }
+  
+  /* Profile styles */
+  .profile-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: white;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+  
+  .profile-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid #eee;
+  }
+  
+  .profile-header h2 {
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .profile-content {
+    padding: var(--spacing-lg);
+  }
+  
+  .profile-section {
+    margin-bottom: var(--spacing-xl);
+  }
+  
+  .profile-section h3 {
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid #eee;
+  }
+  
+  .account-details p {
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+  
+  .verification-badge {
+    display: inline-flex;
+    align-items: center;
+    background-color: #fff3cd;
+    color: #856404;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-small);
+    margin-left: var(--spacing-sm);
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-md);
+  }
+  
+  .stat-card {
+    background-color: #f8f9fa;
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-md);
+    text-align: center;
+    transition: transform var(--transition-fast);
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .stat-value {
+    font-size: var(--font-size-2xl);
+    font-weight: bold;
+    color: var(--primary-color);
+  }
+  
+  .stat-label {
+    color: var(--secondary-color);
+    font-size: var(--font-size-small);
+    margin-top: var(--spacing-xs);
+  }
+  
+  .profile-actions {
+    margin-top: var(--spacing-xl);
+    display: flex;
+    justify-content: flex-end;
+  }
+  
+  @media (max-width: 576px) {
+    .auth-card {
+      padding: var(--spacing-lg);
+    }
+    
+    .button-group {
+      flex-direction: column;
+    }
+  }

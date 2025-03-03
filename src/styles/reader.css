@@ -1,0 +1,516 @@
+/* EPUB Reader styles */
+  
+.reader-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Reader themes */
+  .reader-container.light {
+    background-color: white;
+    color: #333;
+  }
+  
+  .reader-container.sepia {
+    background-color: #f8f2e0;
+    color: #5b4636;
+  }
+  
+  .reader-container.dark {
+    background-color: #333;
+    color: #ddd;
+  }
+  
+  /* Reader header */
+  .reader-header {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background-color: inherit;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 10;
+  }
+  
+  .reader-container.dark .reader-header {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .book-info {
+    flex: 1;
+    margin: 0 var(--spacing-lg);
+    overflow: hidden;
+  }
+  
+  .book-info h2 {
+    font-size: var(--font-size-large);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .book-info p {
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .reader-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+  }
+  
+  /* Reader content */
+  .reader-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .epub-container {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  .epub-container iframe {
+    border: none;
+  }
+  
+  /* Navigation areas for touch/click */
+  .prev-page-area,
+  .next-page-area {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 20%;
+    z-index: 5;
+  }
+  
+  .prev-page-area {
+    left: 0;
+    cursor: w-resize;
+  }
+  
+  .next-page-area {
+    right: 0;
+    cursor: e-resize;
+  }
+  
+  /* Reader controls */
+  .reader-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: inherit;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-md) var(--spacing-lg);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-lg);
+    z-index: 10;
+  }
+  
+  .reader-container.dark .reader-controls {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .controls-section {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .progress-info {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .progress-text {
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+    margin-top: var(--spacing-xs);
+  }
+  
+  .theme-controls {
+    display: flex;
+    gap: var(--spacing-xs);
+  }
+  
+  .theme-button {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: none;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-small);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .theme-button.active {
+    font-weight: 600;
+  }
+  
+  .theme-button.light {
+    background-color: white;
+    color: #333;
+  }
+  
+  .theme-button.light.active {
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  .theme-button.sepia {
+    background-color: #f8f2e0;
+    color: #5b4636;
+  }
+  
+  .theme-button.sepia.active {
+    box-shadow: 0 0 0 2px rgba(91, 70, 54, 0.2);
+  }
+  
+  .theme-button.dark {
+    background-color: #333;
+    color: #ddd;
+  }
+  
+  .theme-button.dark.active {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+  
+  .font-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+  
+  .font-button {
+    background: none;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .font-button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .font-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .font-size-text {
+    font-size: var(--font-size-small);
+    min-width: 45px;
+    text-align: center;
+  }
+  
+  .navigation-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+  }
+  
+  .nav-button {
+    background: none;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  
+  .nav-button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .reader-container.dark .font-button,
+  .reader-container.dark .nav-button {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .reader-container.dark .font-button:hover,
+  .reader-container.dark .nav-button:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  /* Sidebar (Table of Contents) */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 300px;
+    background-color: white;
+    box-shadow: var(--shadow-lg);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--transition-normal);
+  }
+  
+  .reader-container.dark .sidebar {
+    background-color: #222;
+    color: #ddd;
+  }
+  
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  
+  .reader-container.dark .sidebar-header {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-md);
+  }
+  
+  .toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .toc-item {
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .toc-item.level-0 {
+    margin-left: 0;
+  }
+  
+  .toc-item.level-1 {
+    margin-left: var(--spacing-md);
+  }
+  
+  .toc-item.level-2 {
+    margin-left: calc(var(--spacing-md) * 2);
+  }
+  
+  .toc-link {
+    display: block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    text-decoration: none;
+    color: inherit;
+    border-radius: var(--border-radius-sm);
+    transition: background-color var(--transition-fast);
+    border: none;
+    text-align: left;
+    width: 100%;
+    background: none;
+    font-size: var(--font-size-base);
+    cursor: pointer;
+  }
+  
+  .toc-link:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .reader-container.dark .toc-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .empty-toc {
+    padding: var(--spacing-lg);
+    text-align: center;
+    color: var(--secondary-color);
+  }
+  
+  /* Bookmark manager */
+  .bookmark-manager {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 300px;
+    background-color: white;
+    box-shadow: var(--shadow-lg);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    transition: transform var(--transition-normal);
+  }
+  
+  .reader-container.dark .bookmark-manager {
+    background-color: #222;
+    color: #ddd;
+  }
+  
+  .bookmark-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  }
+  
+  .reader-container.dark .bookmark-header {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .bookmark-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .bookmark-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-md);
+  }
+  
+  .bookmark-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  
+  .reader-container.dark .bookmark-item {
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .bookmark-item:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+  
+  .reader-container.dark .bookmark-item:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+  
+  .bookmark-details {
+    flex: 1;
+    margin-right: var(--spacing-sm);
+  }
+  
+  .bookmark-note {
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-base);
+  }
+  
+  .bookmark-date {
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+  }
+  
+  .delete-bookmark {
+    color: var(--danger-color);
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+  }
+  
+  .delete-bookmark:hover {
+    opacity: 1;
+  }
+  
+  .bookmark-actions {
+    padding: var(--spacing-md);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: center;
+  }
+  
+  .reader-container.dark .bookmark-actions {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .add-bookmark {
+    color: var(--primary-color);
+    background: none;
+    border: 1px solid var(--primary-color);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    transition: all var(--transition-fast);
+  }
+  
+  .add-bookmark:hover {
+    background-color: var(--primary-color);
+    color: white;
+  }
+  
+  .add-bookmark-form {
+    padding: var(--spacing-md);
+  }
+  
+  .add-bookmark-form h4 {
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+  }
+  
+  .empty-bookmarks {
+    padding: var(--spacing-lg);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    height: 100%;
+  }
+  
+  @media (max-width: 768px) {
+    .reader-header {
+      padding: var(--spacing-sm);
+    }
+    
+    .book-info {
+      margin: 0 var(--spacing-sm);
+    }
+    
+    .reader-controls {
+      padding: var(--spacing-sm);
+      gap: var(--spacing-sm);
+    }
+    
+    .controls-section {
+      min-width: 100px;
+    }
+    
+    .sidebar,
+    .bookmark-manager {
+      width: 280px;
+    }
+  }
