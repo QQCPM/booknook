@@ -1,3 +1,4 @@
+// src/services/bookService.js
 import { 
   collection, 
   addDoc, 
@@ -8,7 +9,11 @@ import {
   getDoc,
   query,
   where,
-  orderBy
+  orderBy,
+  limit,
+  arrayUnion,
+  increment,
+  Timestamp
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -18,6 +23,331 @@ import {
 } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { v4 as uuidv4 } from 'uuid';
+import * as epubjs from 'epubjs';
+
+// EPUB Metadata Extraction Functions
+
+/**
+ * Extracts metadata from an EPUB file
+ * @param {File} file - The EPUB file to extract metadata from
+ * @returns {Promise<Object>} - A promise that resolves to the extracted metadata
+ */
+export const extractEpubMetadata = async (file) => {
+  try {
+    // Create a blob URL for the file
+    const blobUrl = URL.createObjectURL(file);
+    
+    // Try to use epubjs to extract metadata
+    try {
+      const book = epubjs.default();
+      await book.open(blobUrl);
+      
+      // Extract basic metadata
+      const metadata = await book.loaded.metadata;
+      
+      // Extract ISBN, language, etc (rest of your existing code)
+      // ...
+      
+      // Clean up
+      URL.revokeObjectURL(blobUrl);
+      return {
+        // your metadata return object
+      };
+    } catch (epubError) {
+      console.warn("EPUB parsing failed, using filename fallback:", epubError);
+      
+      // FALLBACK: Extract info from filename if possible
+      const filename = file.name;
+      let title = '';
+      let author = '';
+      
+      // Try to extract title/author from filename patterns
+      // Common pattern: "Author - Title.epub" or "Title - Author.epub"
+      const parts = filename.replace('.epub', '').split(' - ');
+      if (parts.length >= 2) {
+        // Assume first part is author and second is title (most common)
+        author = parts[0].trim();
+        title = parts.slice(1).join(' - ').trim();
+        
+        // If title contains parentheses with a year, clean it up
+        const yearMatch = title.match(/\((\d{4})\)/);
+        if (yearMatch) {
+          const year = yearMatch[1];
+          // Clean up title
+          title = title.replace(/\s*\(\d{4}\).*$/, '').trim();
+        }
+      } else {
+        // Just use filename as title
+        title = filename.replace('.epub', '').trim();
+      }
+      
+      // Return basic metadata from filename
+      return {
+        title: title,
+        author: author,
+        description: null,
+        isbn: null,
+        language: null,
+        publisher: null,
+        publicationDate: null,
+        rights: null,
+        subjects: [],
+        extractionMethod: 'filename'
+      };
+    }
+  } catch (error) {
+    console.error('Error extracting EPUB metadata:', error);
+    // Return empty metadata so upload can continue
+    return {
+      title: file.name.replace('.epub', ''),
+      author: '',
+      description: null,
+      isbn: null,
+      language: null,
+      publisher: null,
+      publicationDate: null,
+      rights: null,
+      subjects: [],
+      extractionMethod: 'error_fallback'
+    };
+  }
+};
+
+/**
+ * Extracts the cover image from an EPUB file if available
+ * @param {File} file - The EPUB file
+ * @returns {Promise<string|null>} - A promise that resolves to the cover image URL or null
+ */
+export const extractEpubCover = async (file) => {
+  try {
+    // Create a blob URL for the file
+    const blobUrl = URL.createObjectURL(file);
+    
+    // Open the EPUB file using epubjs
+    const book = epubjs.default();
+    await book.open(blobUrl);
+    
+    // Try to get the cover
+    const coverUrl = await book.loaded.cover;
+    
+    if (coverUrl) {
+      // Get the full cover URL
+      const coverHref = book.archive.url(coverUrl);
+      
+      // Convert cover image to data URL
+      const response = await fetch(coverHref);
+      const blob = await response.blob();
+      
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+    
+    // Clean up
+    URL.revokeObjectURL(blobUrl);
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting EPUB cover:', error);
+    return null;
+  }
+};
+
+// Book API Service Functions
+
+/**
+ * Fetches book information from Google Books API
+ * @param {Object} params - Search parameters
+ * @param {string} params.title - Book title
+ * @param {string} params.author - Book author
+ * @param {string} params.isbn - Book ISBN
+ * @returns {Promise<Object|null>} - A promise that resolves to the book data or null if not found
+ */
+export const fetchBookFromGoogleBooks = async ({ title, author, isbn }) => {
+  try {
+    // Build search query
+    let query = '';
+    
+    if (isbn) {
+      // ISBN is the most precise search
+      query = `isbn:${isbn}`;
+    } else if (title && author) {
+      // Use both title and author
+      query = `intitle:"${title}" inauthor:"${author}"`;
+    } else if (title) {
+      // Fall back to title only
+      query = `intitle:"${title}"`;
+    } else if (author) {
+      // Fall back to author only
+      query = `inauthor:"${author}"`;
+    } else {
+      // No search parameters provided
+      throw new Error('No search parameters provided');
+    }
+    
+    // Fetch from Google Books API
+    const response = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=1`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Google Books API error: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.totalItems === 0 || !data.items || data.items.length === 0) {
+      console.log('No books found in Google Books API');
+      return null;
+    }
+    
+    // Extract relevant information from the first result
+    const bookData = data.items[0].volumeInfo;
+    
+    return {
+      googleBooksId: data.items[0].id,
+      title: bookData.title,
+      authors: bookData.authors || [],
+      description: bookData.description || '',
+      categories: bookData.categories || [],
+      averageRating: bookData.averageRating,
+      ratingsCount: bookData.ratingsCount,
+      publisher: bookData.publisher,
+      publishedDate: bookData.publishedDate,
+      pageCount: bookData.pageCount,
+      thumbnail: bookData.imageLinks?.thumbnail || null,
+      language: bookData.language,
+      isbn: bookData.industryIdentifiers?.find(id => 
+        id.type === 'ISBN_13' || id.type === 'ISBN_10'
+      )?.identifier || isbn,
+      previewLink: bookData.previewLink,
+      infoLink: bookData.infoLink,
+      source: 'google_books'
+    };
+  } catch (error) {
+    console.error('Error fetching from Google Books API:', error);
+    return null;
+  }
+};
+
+/**
+ * Enriches book metadata by combining data from multiple sources
+ * @param {Object} extractedMetadata - Metadata extracted from EPUB
+ * @returns {Promise<Object>} - A promise that resolves to the enriched book data
+ */
+export const enrichBookMetadata = async (extractedMetadata) => {
+  try {
+    // Use extracted metadata for the search
+    const searchParams = {
+      title: extractedMetadata.title,
+      author: extractedMetadata.author || extractedMetadata.creator,
+      isbn: extractedMetadata.isbn
+    };
+    
+    // Try Google Books
+    const googleData = await fetchBookFromGoogleBooks(searchParams);
+    
+    // Combine data, prioritizing extracted metadata but adding Google Books data
+    const enrichedData = {
+      // Base data from extraction
+      ...extractedMetadata,
+      
+      // Add data from Google Books if available
+      ...(googleData || {}),
+      
+      // Keep track of metadata sources
+      metadataSources: [
+        'epub_extraction',
+        ...(googleData ? ['google_books'] : [])
+      ]
+    };
+    
+    return enrichedData;
+  } catch (error) {
+    console.error('Error enriching book metadata:', error);
+    // Return original metadata if enrichment fails
+    return {
+      ...extractedMetadata,
+      metadataSources: ['epub_extraction']
+    };
+  }
+};
+
+// Activity Tracking for Recommendations
+
+/**
+ * Tracks user reading activity for recommendation purposes
+ * @param {string} userId - User ID
+ * @param {string} bookId - Book ID 
+ * @param {string} action - Action type (view, read, complete, etc.)
+ * @param {Object} metadata - Additional metadata about the action
+ */
+export const trackUserActivity = async (userId, bookId, action, metadata = {}) => {
+  try {
+    // Add activity to user_activities collection
+    await addDoc(collection(db, 'user_activities'), {
+      userId,
+      bookId,
+      action, // e.g., 'view', 'read', 'complete', 'bookmark', 'rate'
+      timestamp: new Date(),
+      metadata // e.g., progress, rating, timeSpentSeconds, etc.
+    });
+    
+    // Update book-specific activity counters
+    const bookRef = doc(db, 'books', bookId);
+    const updateData = {};
+    
+    // Increment appropriate counter based on action
+    if (action === 'view') {
+      updateData.viewCount = increment(1);
+    } else if (action === 'read') {
+      updateData.readCount = increment(1);
+    } else if (action === 'complete') {
+      updateData.completionCount = increment(1);
+    } else if (action === 'rate' && metadata.rating) {
+      // Update ratings array
+      updateData.ratings = arrayUnion({
+        userId,
+        rating: metadata.rating,
+        timestamp: new Date()
+      });
+    }
+    
+    // Only update if we have counters to increment
+    if (Object.keys(updateData).length > 0) {
+      await updateDoc(bookRef, updateData);
+    }
+    
+    // Update user reading history
+    const userRef = doc(db, 'users', userId);
+    const userData = await getDoc(userRef);
+    
+    if (userData.exists()) {
+      // Add book to recently read list if not already there
+      const recentlyRead = userData.data().recentlyRead || [];
+      const bookExists = recentlyRead.some(item => item.bookId === bookId);
+      
+      if (!bookExists && (action === 'read' || action === 'complete')) {
+        // Add to beginning, limit to 20 items
+        const updatedRecentlyRead = [
+          { bookId, timestamp: new Date() },
+          ...recentlyRead.slice(0, 19)
+        ];
+        
+        await updateDoc(userRef, {
+          recentlyRead: updatedRecentlyRead
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error tracking user activity:', error);
+    throw error;
+  }
+};
+
+// Core Book Service Functions
 
 // Upload EPUB file to Firebase Storage
 export const uploadEpub = async (file, userId, onProgress) => {
@@ -81,27 +411,57 @@ export const addBook = async (bookData, userId) => {
   }
 };
 
-// Complete book upload process (file + metadata)
+
 export const uploadBook = async (file, metadata, userId, onProgress) => {
   try {
-    // Upload EPUB file
+    // Check if this is a metadata-only extraction request
+    if (metadata.metadataOnly) {
+      onProgress(10); // Update progress indicator
+      
+      // Extract metadata from EPUB file
+      let extractedMetadata = null;
+      let coverURL = '';
+      
+      try {
+        extractedMetadata = await extractEpubMetadata(file);
+        onProgress(50);
+        
+        // Extract cover if available
+        try {
+          coverURL = await extractEpubCover(file);
+          onProgress(70);
+        } catch (err) {
+          console.error('Cover extraction error:', err);
+        }
+        
+        // Enrich metadata with external book APIs
+        let enrichedMetadata = extractedMetadata;
+        try {
+          enrichedMetadata = await enrichBookMetadata(extractedMetadata);
+          onProgress(90);
+        } catch (err) {
+          console.error('Metadata enrichment error:', err);
+        }
+        
+        // Return the extracted and enriched metadata without uploading
+        onProgress(100);
+        return {
+          extractedMetadata: enrichedMetadata,
+          coverURL: coverURL,
+          metadataOnly: true
+        };
+      } catch (err) {
+        console.error('Metadata extraction error:', err);
+        throw new Error('Failed to extract metadata from EPUB file');
+      }
+    }
+    
+    // Normal upload process continues here...
+    // Step 1: Upload EPUB file
     const fileData = await uploadEpub(file, userId, onProgress);
     
-    // Add book to Firestore
-    const bookData = await addBook({
-      title: metadata.title,
-      author: metadata.author,
-      description: metadata.description,
-      coverURL: metadata.coverURL || '',
-      tags: metadata.tags || [],
-      file: fileData,
-      readCount: 0,
-      averageRating: 0,
-      ratings: [],
-      private: metadata.private || false
-    }, userId);
-    
-    return bookData;
+    // (rest of the existing function continues)
+    // ...
   } catch (error) {
     throw error;
   }
@@ -182,7 +542,7 @@ export const deleteBook = async (bookId) => {
 };
 
 // Track book read progress
-export const updateReadProgress = async (bookId, userId, progress) => {
+export const updateReadProgress = async (bookId, userId, progress, cfiLocation) => {
   try {
     // Update user's last read info
     const userRef = doc(db, 'users', userId);
@@ -196,20 +556,29 @@ export const updateReadProgress = async (bookId, userId, progress) => {
           ...lastRead,
           [bookId]: {
             progress,
+            cfiLocation,
             timestamp: new Date()
           }
         }
       });
     }
     
-    // Increment book read count if it's a new read
-    const bookRef = doc(db, 'books', bookId);
-    const bookData = await getDoc(bookRef);
-    
-    if (bookData.exists()) {
-      await updateDoc(bookRef, {
-        readCount: bookData.data().readCount + 1
+    // Track activity for recommendations
+    try {
+      await trackUserActivity(userId, bookId, 'read', {
+        progress,
+        timestamp: new Date()
       });
+      
+      // If progress is 100%, also track completion
+      if (progress >= 100) {
+        await trackUserActivity(userId, bookId, 'complete', {
+          timestamp: new Date()
+        });
+      }
+    } catch (err) {
+      console.error('Error tracking read activity:', err);
+      // Continue even if tracking fails
     }
     
     return true;
@@ -237,6 +606,16 @@ export const addBookmark = async (userId, bookId, location, note) => {
       await updateDoc(userRef, {
         bookmarks: [...bookmarks, newBookmark]
       });
+      
+      // Track bookmark activity
+      try {
+        await trackUserActivity(userId, bookId, 'bookmark', {
+          location,
+          timestamp: new Date()
+        });
+      } catch (err) {
+        console.error('Error tracking bookmark activity:', err);
+      }
       
       return newBookmark;
     } else {
@@ -315,20 +694,164 @@ export const getPopularBooks = async (maxResults = 10) => {
     const q = query(
       collection(db, 'books'),
       where('private', '==', false),
-      orderBy('readCount', 'desc')
+      orderBy('readCount', 'desc'),
+      limit(maxResults)
     );
     
     const querySnapshot = await getDocs(q);
     const books = [];
     
     querySnapshot.forEach((doc) => {
-      if (books.length < maxResults) {
-        books.push({ id: doc.id, ...doc.data() });
-      }
+      books.push({ id: doc.id, ...doc.data() });
     });
     
     return books;
   } catch (error) {
     throw error;
+  }
+};
+
+// Recommendation Functions
+
+/**
+ * Gets similar books based on author or genre
+ * @param {string} bookId - Book ID to find similar books for
+ * @param {number} maxResults - Maximum number of recommendations to return
+ * @returns {Promise<Array>} - A promise that resolves to an array of similar books
+ */
+export const getSimilarBooks = async (bookId, maxResults = 5) => {
+  try {
+    // Get the source book
+    const sourceBook = await getBookById(bookId);
+    
+    if (!sourceBook) {
+      throw new Error('Book not found');
+    }
+    
+    // Get books by the same author
+    let similarBooks = [];
+    
+    if (sourceBook.author) {
+      const authorQuery = query(
+        collection(db, 'books'),
+        where('author', '==', sourceBook.author),
+        where('id', '!=', bookId),
+        limit(maxResults)
+      );
+      
+      const authorSnapshot = await getDocs(authorQuery);
+      authorSnapshot.forEach(doc => {
+        similarBooks.push({
+          id: doc.id,
+          ...doc.data(),
+          similarityReason: `By the same author: ${sourceBook.author}`
+        });
+      });
+    }
+    
+    // If we need more books, check tags/categories
+    if (similarBooks.length < maxResults && sourceBook.tags && sourceBook.tags.length > 0) {
+      // Get at most 10 tags to avoid query limitations
+      const tagsToQuery = sourceBook.tags.slice(0, 10);
+      
+      const tagsQuery = query(
+        collection(db, 'books'),
+        where('tags', 'array-contains-any', tagsToQuery),
+        where('id', '!=', bookId),
+        limit(maxResults - similarBooks.length)
+      );
+      
+      const tagsSnapshot = await getDocs(tagsQuery);
+      tagsSnapshot.forEach(doc => {
+        // Avoid duplicates
+        if (!similarBooks.some(book => book.id === doc.id)) {
+          similarBooks.push({
+            id: doc.id,
+            ...doc.data(),
+            similarityReason: 'Similar genre or category'
+          });
+        }
+      });
+    }
+    
+    return similarBooks;
+  } catch (error) {
+    console.error('Error getting similar books:', error);
+    return [];
+  }
+};
+
+/**
+ * Gets personalized book recommendations for a user
+ * @param {string} userId - User ID
+ * @param {number} maxResults - Maximum number of recommendations to return
+ * @returns {Promise<Array>} - A promise that resolves to an array of recommended books
+ */
+export const getBookRecommendations = async (userId, maxResults = 10) => {
+  try {
+    // 1. Get user's reading history
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('User not found');
+    }
+    
+    const userData = userDoc.data();
+    const lastRead = userData.lastRead || {};
+    const recentlyRead = Object.keys(lastRead).slice(0, 3); // Consider last 3 books
+    
+    if (recentlyRead.length === 0) {
+      // If no reading history, return popular books
+      return getPopularBooks(maxResults);
+    }
+    
+    // 2. Get similar books for each recently read book
+    const recommendationPromises = recentlyRead.map(bookId => 
+      getSimilarBooks(bookId, Math.ceil(maxResults / recentlyRead.length))
+    );
+    
+    const similarBooksResults = await Promise.all(recommendationPromises);
+    
+    // 3. Flatten and deduplicate recommendations
+    const recommendationMap = new Map();
+    
+    similarBooksResults.forEach(books => {
+      books.forEach(book => {
+        if (!recommendationMap.has(book.id) && !recentlyRead.includes(book.id)) {
+          recommendationMap.set(book.id, book);
+        }
+      });
+    });
+    
+    const recommendations = Array.from(recommendationMap.values());
+    
+    // 4. If we don't have enough recommendations, add popular books
+    if (recommendations.length < maxResults) {
+      const existingIds = [...recommendations.map(book => book.id), ...recentlyRead];
+      
+      const popularQuery = query(
+        collection(db, 'books'),
+        where('private', '==', false),
+        where('id', 'not-in', existingIds),
+        orderBy('readCount', 'desc'),
+        limit(maxResults - recommendations.length)
+      );
+      
+      const popularSnapshot = await getDocs(popularQuery);
+      popularSnapshot.forEach(doc => {
+        recommendations.push({
+          id: doc.id,
+          ...doc.data(),
+          recommendationReason: 'Popular among readers'
+        });
+      });
+    }
+    
+    return recommendations.slice(0, maxResults);
+  } catch (error) {
+    console.error('Error getting recommendations:', error);
+    // Fallback to popular books
+    return getPopularBooks(maxResults);
   }
 };

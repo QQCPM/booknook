@@ -297,6 +297,8 @@
   }
   
   /* Import other CSS files */
+  
   @import 'auth.css';
   @import 'books.css';
   @import 'reader.css';
+  @import 'upload.css';

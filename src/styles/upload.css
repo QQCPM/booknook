@@ -1,0 +1,124 @@
+/* Add these styles to your CSS */
+
+/* General spacing */
+.mb-4 {
+    margin-bottom: 1.5rem;
+  }
+  
+  .mt-2 {
+    margin-top: 0.5rem;
+  }
+  
+  .text-muted {
+    color: #6c757d;
+  }
+  
+  .text-success {
+    color: #28a745;
+  }
+  
+  /* Metadata styling */
+  .metadata-field {
+    border-left: 3px solid #4361ee !important;
+    background-color: rgba(67, 97, 238, 0.05);
+  }
+  
+  .metadata-label {
+    margin-left: 8px;
+    font-size: 12px;
+    color: #4361ee;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .metadata-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 14px;
+    color: #28a745;
+  }
+  
+  .metadata-info-box {
+    margin-top: 20px;
+    padding: 16px;
+    background-color: rgba(67, 97, 238, 0.05);
+    border-radius: 8px;
+    border-left: 3px solid #4361ee;
+  }
+  
+  .metadata-info-box h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: #4361ee;
+  }
+  
+  .metadata-info-box p {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  
+  /* Cover source badge */
+  .cover-source-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Edit cover button */
+  .edit-cover {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #4361ee;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: background-color 0.2s;
+  }
+  
+  .edit-cover:hover {
+    background-color: white;
+  }
+  
+  /* Loading spinner */
+  .file-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+  }
+  
+  /* Book metadata section */
+  .book-metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  /* Update file-drop-zone for metadata extraction feedback */
+  .file-drop-zone.loading {
+    border-color: #4361ee;
+    background-color: rgba(67, 97, 238, 0.05);
+  }
