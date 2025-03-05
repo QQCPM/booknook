@@ -414,58 +414,159 @@ export const addBook = async (bookData, userId) => {
 
 export const uploadBook = async (file, metadata, userId, onProgress) => {
   try {
-    // Check if this is a metadata-only extraction request
-    if (metadata.metadataOnly) {
-      onProgress(10); // Update progress indicator
+    // Initialize metadata and cover variables
+    let extractedMetadata = null;
+    let coverURL = '';
+    let bookTitle = '';
+    let bookAuthor = '';
+    let bookDescription = '';
+    
+    // STEP 1: Try to extract metadata first
+    try {
+      onProgress(10);
       
-      // Extract metadata from EPUB file
-      let extractedMetadata = null;
-      let coverURL = '';
+      // Extract basic info from filename if all else fails
+      const filename = file.name;
+      const filenameInfo = extractInfoFromFilename(filename);
+      bookTitle = filenameInfo.title;
+      bookAuthor = filenameInfo.author;
       
+      // Try to extract metadata from EPUB
       try {
         extractedMetadata = await extractEpubMetadata(file);
-        onProgress(50);
-        
-        // Extract cover if available
-        try {
-          coverURL = await extractEpubCover(file);
-          onProgress(70);
-        } catch (err) {
-          console.error('Cover extraction error:', err);
+        if (extractedMetadata) {
+          bookTitle = extractedMetadata.title || bookTitle;
+          bookAuthor = extractedMetadata.author || bookAuthor;
+          bookDescription = extractedMetadata.description || '';
+          console.log("Extracted metadata successfully:", extractedMetadata);
         }
-        
-        // Enrich metadata with external book APIs
-        let enrichedMetadata = extractedMetadata;
-        try {
-          enrichedMetadata = await enrichBookMetadata(extractedMetadata);
-          onProgress(90);
-        } catch (err) {
-          console.error('Metadata enrichment error:', err);
-        }
-        
-        // Return the extracted and enriched metadata without uploading
-        onProgress(100);
-        return {
-          extractedMetadata: enrichedMetadata,
-          coverURL: coverURL,
-          metadataOnly: true
-        };
-      } catch (err) {
-        console.error('Metadata extraction error:', err);
-        throw new Error('Failed to extract metadata from EPUB file');
+      } catch (metadataError) {
+        console.warn("Metadata extraction failed:", metadataError);
+        // Continue with file name-based info
       }
+      
+      onProgress(40);
+      
+      // Try to extract cover
+      try {
+        coverURL = await extractEpubCover(file);
+      } catch (coverErr) {
+        console.warn("Cover extraction failed:", coverErr);
+      }
+      
+      onProgress(50);
+      
+      // Use provided metadata if available, fallback to extracted
+      bookTitle = metadata.title || bookTitle || filename.replace('.epub', '');
+      bookAuthor = metadata.author || bookAuthor || 'Unknown Author';
+      bookDescription = metadata.description || bookDescription || '';
+      
+    } catch (extractionError) {
+      console.error("Extraction phase failed:", extractionError);
+      // Continue with upload anyway, using basic metadata
     }
     
-    // Normal upload process continues here...
-    // Step 1: Upload EPUB file
-    const fileData = await uploadEpub(file, userId, onProgress);
+    // STEP 2: Upload the file
+    onProgress(60);
+    console.log("Starting file upload to Firebase storage...");
     
-    // (rest of the existing function continues)
-    // ...
+    try {
+      // Upload the EPUB file to Firebase Storage
+      const fileData = await uploadEpub(file, userId, progress => {
+        onProgress(60 + progress * 0.2); // Map progress to 60-80%
+      });
+      
+      onProgress(80);
+      console.log("File uploaded successfully:", fileData);
+      
+      // STEP 3: Create the Firestore document
+      console.log("Creating Firestore record with metadata:", {
+        title: bookTitle,
+        author: bookAuthor
+      });
+      
+      // Create directly with addDoc to avoid any issues with the addBook function
+      const bookCollection = collection(db, 'books');
+      const bookRef = await addDoc(bookCollection, {
+        title: bookTitle,
+        author: bookAuthor,
+        description: bookDescription,
+        coverURL: metadata.coverURL || coverURL || '',
+        tags: metadata.tags || [],
+        file: fileData,
+        userId: userId,
+        readCount: 0,
+        viewCount: 0,
+        completionCount: 0,
+        averageRating: 0,
+        ratings: [],
+        private: metadata.private || false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      // Create the full book object
+      const bookData = {
+        id: bookRef.id,
+        title: bookTitle,
+        author: bookAuthor,
+        description: bookDescription,
+        coverURL: metadata.coverURL || coverURL || '',
+        tags: metadata.tags || [],
+        file: fileData,
+        userId: userId,
+        readCount: 0,
+        completionCount: 0,
+        averageRating: 0,
+        ratings: [],
+        private: metadata.private || false
+      };
+      
+      onProgress(95);
+      console.log("Book record created successfully with ID:", bookRef.id);
+      
+      // Track activity
+      try {
+        await trackUserActivity(userId, bookRef.id, 'upload', {
+          fileSize: file.size,
+          fileType: file.type
+        });
+      } catch (err) {
+        console.warn("Activity tracking failed (non-critical):", err);
+      }
+      
+      onProgress(100);
+      return bookData;
+      
+    } catch (uploadError) {
+      console.error("Upload phase failed:", uploadError);
+      throw new Error(`Failed to upload book: ${uploadError.message}`);
+    }
   } catch (error) {
+    console.error("Book upload failed:", error);
     throw error;
   }
 };
+function extractInfoFromFilename(filename) {
+  filename = filename.replace('.epub', '');
+  
+  // Try to extract author and title from filename patterns
+  let title = filename;
+  let author = 'Unknown Author';
+  
+  // Common pattern: "Author - Title" or "Title - Author"
+  const parts = filename.split(' - ');
+  if (parts.length >= 2) {
+    // Assume first part is author and second is title (most common)
+    author = parts[0].trim();
+    title = parts.slice(1).join(' - ').trim();
+    
+    // Clean up title if it has a year or publisher
+    title = title.replace(/\s*\(\d{4}\).*$/, '').trim();
+  }
+  
+  return { title, author };
+}
 
 // Get user's books
 export const getUserBooks = async (userId) => {
