@@ -53,7 +53,7 @@ Modern web browser (Chrome, Firefox, Safari, Edge)
 
 Clone the repository
 
-bashCopygit clone https://github.com/yourusername/booknook.git
+bash: Copygit clone https://github.com/yourusername/booknook.git
 cd booknook
 
 Install dependencies
