@@ -23,6 +23,7 @@ import {
 } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { v4 as uuidv4 } from 'uuid';
+import { extractEnhancedMetadata } from './aiMetadataService';
 import * as epubjs from 'epubjs';
 
 // EPUB Metadata Extraction Functions
@@ -414,55 +415,61 @@ export const addBook = async (bookData, userId) => {
 
 export const uploadBook = async (file, metadata, userId, onProgress) => {
   try {
-    // Initialize metadata and cover variables
-    let extractedMetadata = null;
-    let coverURL = '';
+    // Initialize metadata variables
     let bookTitle = '';
     let bookAuthor = '';
     let bookDescription = '';
+    let coverURL = '';
+    let tags = [];
     
-    // STEP 1: Try to extract metadata first
+    // STEP 1: Extract metadata with our enhanced AI service
     try {
       onProgress(10);
+      console.log("Starting enhanced metadata extraction...");
       
-      // Extract basic info from filename if all else fails
+      // Basic metadata from filename as fallback
       const filename = file.name;
       const filenameInfo = extractInfoFromFilename(filename);
       bookTitle = filenameInfo.title;
       bookAuthor = filenameInfo.author;
       
-      // Try to extract metadata from EPUB
-      try {
-        extractedMetadata = await extractEpubMetadata(file);
-        if (extractedMetadata) {
-          bookTitle = extractedMetadata.title || bookTitle;
-          bookAuthor = extractedMetadata.author || bookAuthor;
-          bookDescription = extractedMetadata.description || '';
-          console.log("Extracted metadata successfully:", extractedMetadata);
+      // Use our new AI-powered extraction 
+      const enhancedMetadata = await extractEnhancedMetadata(file);
+      console.log("AI Metadata extraction result:", enhancedMetadata);
+      
+      if (enhancedMetadata) {
+        // Use the AI-extracted metadata
+        bookTitle = enhancedMetadata.title || bookTitle;
+        bookAuthor = enhancedMetadata.author || bookAuthor;
+        bookDescription = enhancedMetadata.description || '';
+        tags = enhancedMetadata.tags || [];
+        
+        // If we have a cover from metadata
+        if (enhancedMetadata.coverBlob) {
+          const coverDataUrl = await blobToDataURL(enhancedMetadata.coverBlob);
+          coverURL = coverDataUrl;
         }
-      } catch (metadataError) {
-        console.warn("Metadata extraction failed:", metadataError);
-        // Continue with file name-based info
+        
+        // Store extraction methods for analytics
+        metadata.extractionMethods = enhancedMetadata.extractionMethods || ['unknown'];
+        
+        // If AI was highly confident, make note of that
+        if (enhancedMetadata.aiConfidence && enhancedMetadata.aiConfidence > 0.9) {
+          metadata.aiConfidence = enhancedMetadata.aiConfidence;
+        }
       }
       
       onProgress(40);
       
-      // Try to extract cover
-      try {
-        coverURL = await extractEpubCover(file);
-      } catch (coverErr) {
-        console.warn("Cover extraction failed:", coverErr);
-      }
-      
-      onProgress(50);
-      
-      // Use provided metadata if available, fallback to extracted
+      // Use provided metadata if available, otherwise use extracted
       bookTitle = metadata.title || bookTitle || filename.replace('.epub', '');
       bookAuthor = metadata.author || bookAuthor || 'Unknown Author';
       bookDescription = metadata.description || bookDescription || '';
+      coverURL = metadata.coverURL || coverURL || '';
+      tags = metadata.tags || tags || [];
       
     } catch (extractionError) {
-      console.error("Extraction phase failed:", extractionError);
+      console.error("Metadata extraction phase failed:", extractionError);
       // Continue with upload anyway, using basic metadata
     }
     
@@ -491,8 +498,8 @@ export const uploadBook = async (file, metadata, userId, onProgress) => {
         title: bookTitle,
         author: bookAuthor,
         description: bookDescription,
-        coverURL: metadata.coverURL || coverURL || '',
-        tags: metadata.tags || [],
+        coverURL: coverURL,
+        tags: tags,
         file: fileData,
         userId: userId,
         readCount: 0,
@@ -500,6 +507,7 @@ export const uploadBook = async (file, metadata, userId, onProgress) => {
         completionCount: 0,
         averageRating: 0,
         ratings: [],
+        extractionMethods: metadata.extractionMethods || [],
         private: metadata.private || false,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -511,14 +519,15 @@ export const uploadBook = async (file, metadata, userId, onProgress) => {
         title: bookTitle,
         author: bookAuthor,
         description: bookDescription,
-        coverURL: metadata.coverURL || coverURL || '',
-        tags: metadata.tags || [],
+        coverURL: coverURL,
+        tags: tags,
         file: fileData,
         userId: userId,
         readCount: 0,
         completionCount: 0,
         averageRating: 0,
         ratings: [],
+        extractionMethods: metadata.extractionMethods || [],
         private: metadata.private || false
       };
       
@@ -529,7 +538,8 @@ export const uploadBook = async (file, metadata, userId, onProgress) => {
       try {
         await trackUserActivity(userId, bookRef.id, 'upload', {
           fileSize: file.size,
-          fileType: file.type
+          fileType: file.type,
+          extractionMethods: metadata.extractionMethods || []
         });
       } catch (err) {
         console.warn("Activity tracking failed (non-critical):", err);
@@ -547,6 +557,18 @@ export const uploadBook = async (file, metadata, userId, onProgress) => {
     throw error;
   }
 };
+
+
+const blobToDataURL = blob => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+// Keep the existing extractInfoFromFilename helper
 function extractInfoFromFilename(filename) {
   filename = filename.replace('.epub', '');
   

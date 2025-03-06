@@ -1,7 +1,10 @@
-import React, { useState, useRef } from 'react';
+// src/components/Books/BookUpload.js (UPDATED)
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUpload, FiX, FiImage, FiInfo, FiCheck, FiEdit } from 'react-icons/fi';
+import { FiUpload, FiX, FiImage, FiInfo, FiCheck, FiEdit, FiCpu, FiLoader } from 'react-icons/fi';
 import { uploadBook } from '../../services/bookService';
+import { extractEnhancedMetadata } from '../../services/aiMetadataService';
+import { extractContentFeatures } from '../../services/aiRecommendationService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBooks } from '../../contexts/BookContext';
 import Alert from '../UI/Alert';
@@ -22,6 +25,14 @@ const BookUpload = () => {
   const [isMetadataLoading, setIsMetadataLoading] = useState(false);
   const [metadataExtracted, setMetadataExtracted] = useState(false);
   const [metadataSource, setMetadataSource] = useState(null);
+  const [extractionMethods, setExtractionMethods] = useState([]);
+  const [contentFeatures, setContentFeatures] = useState(null);
+  
+  // AI analysis state
+  const [isAiAnalysisEnabled, setIsAiAnalysisEnabled] = useState(true);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [aiAnalysisComplete, setAiAnalysisComplete] = useState(false);
+  const [detectedContentType, setDetectedContentType] = useState(null);
   
   // Upload state
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -37,48 +48,146 @@ const BookUpload = () => {
   const navigate = useNavigate();
 
   // Handle file selection
-// In your handleFileChange function in BookUpload.js:
-
-const handleFileChange = async (e) => {
-  const selectedFile = e.target.files[0];
-  
-  if (selectedFile) {
-    if (selectedFile.type !== 'application/epub+zip') {
-      setError('Only EPUB files are supported');
-      return;
-    }
+  const handleFileChange = async (e) => {
+    const selectedFile = e.target.files[0];
     
-    setFile(selectedFile);
-    setFileName(selectedFile.name);
-    setError('');
-    
-    // Add a simple filename-based extraction as fallback
-    const filename = selectedFile.name;
-    const filenameParts = filename.replace('.epub', '').split(' - ');
-    if (filenameParts.length >= 2) {
-      setTitle(filenameParts.slice(1).join(' - ').trim());
-      setAuthor(filenameParts[0].trim());
-    } else {
-      setTitle(filename.replace('.epub', '').trim());
-    }
-    
-    // Set "metadata source" so UI always shows something
-    setMetadataSource('filename (basic)');
-    
-    // Try automated extraction if possible
-    try {
-      setIsMetadataLoading(true);
-      setSuccess('');
+    if (selectedFile) {
+      if (selectedFile.type !== 'application/epub+zip') {
+        setError('Only EPUB files are supported');
+        return;
+      }
       
-      // This is where you'd do your extraction
-      // Even if it fails, we already have the filename-based fallback
-    } catch (err) {
-      console.error('Metadata extraction error (non-critical):', err);
-    } finally {
-      setIsMetadataLoading(false);
+      setFile(selectedFile);
+      setFileName(selectedFile.name);
+      setError('');
+      
+      // Reset state
+      setMetadataExtracted(false);
+      setMetadataSource(null);
+      setExtractionMethods([]);
+      setAiAnalysisComplete(false);
+      setDetectedContentType(null);
+      
+      // Extract metadata using our enhanced AI service
+      try {
+        setIsMetadataLoading(true);
+        setSuccess('');
+        
+        const metadata = await extractEnhancedMetadata(selectedFile);
+        
+        if (metadata) {
+          // Update form fields with extracted metadata
+          setTitle(metadata.title || selectedFile.name.replace('.epub', ''));
+          setAuthor(metadata.author || 'Unknown Author');
+          setDescription(metadata.description || '');
+          
+          // Set cover image if available
+          if (metadata.coverBlob) {
+            const reader = new FileReader();
+            reader.onloadend = () => setCoverImageUrl(reader.result);
+            reader.readAsDataURL(metadata.coverBlob);
+          } else if (metadata.existingCoverURL) {
+            setCoverImageUrl(metadata.existingCoverURL);
+          }
+          
+          // Set tags if available
+          if (metadata.tags && metadata.tags.length > 0) {
+            setTags(metadata.tags.join(', '));
+          }
+          
+          // Track extraction methods for analytics
+          setExtractionMethods(metadata.extractionMethods || ['basic']);
+          
+          // Determine metadata source for UI display
+          if (metadata.extractionMethods) {
+            if (metadata.extractionMethods.includes('ai_content_analysis')) {
+              setMetadataSource('AI content analysis');
+            } else if (metadata.extractionMethods.includes('epub_metadata')) {
+              setMetadataSource('EPUB metadata');
+            } else if (metadata.extractionMethods.includes('google_books_isbn') || 
+                      metadata.extractionMethods.includes('google_books_title')) {
+              setMetadataSource('Google Books');
+            } else if (metadata.extractionMethods.includes('internal_db_match')) {
+              setMetadataSource('BookNook database');
+            } else {
+              setMetadataSource('automated extraction');
+            }
+          } else {
+            setMetadataSource('basic extraction');
+          }
+          
+          setMetadataExtracted(true);
+          setSuccess('Metadata extracted successfully');
+          
+          // If AI analysis is enabled, also analyze content
+          if (isAiAnalysisEnabled) {
+            await analyzeBookContent(selectedFile);
+          }
+        }
+      } catch (err) {
+        console.error('Metadata extraction error:', err);
+        setError('Error extracting metadata. Basic information will be used.');
+      } finally {
+        setIsMetadataLoading(false);
+      }
     }
-  }
-};
+  };
+  
+  // Analyze book content for better recommendations
+  const analyzeBookContent = async (bookFile) => {
+    try {
+      setIsAiAnalyzing(true);
+      
+      // Read a portion of the book for analysis
+      const blobUrl = URL.createObjectURL(bookFile);
+      const book = window.ePub(blobUrl);
+      
+      // Get first few sections
+      const sections = [];
+      let i = 0;
+      book.spine.each((item) => {
+        if (i < 5) sections.push(item.href);
+        i++;
+      });
+      
+      // Extract text from sections
+      const textPromises = sections.map(href => 
+        book.load(href).then(doc => {
+          return doc.documentElement.textContent || '';
+        })
+      );
+      
+      const textContents = await Promise.all(textPromises);
+      const sampleText = textContents.join(' ').substring(0, 50000); // First 50K chars
+      
+      // Extract content features
+      const features = extractContentFeatures(sampleText);
+      setContentFeatures(features);
+      
+      // Identify content type based on categories
+      if (features.categories.length > 0) {
+        setDetectedContentType(features.categories[0]);
+      }
+      
+      // Clean up
+      URL.revokeObjectURL(blobUrl);
+      
+      setAiAnalysisComplete(true);
+      
+      // Update tags based on AI analysis if we don't have tags yet
+      if ((!tags || tags.length === 0) && features.keywords.length > 0) {
+        // Add top 5 keywords as tags
+        const topKeywords = features.keywords.slice(0, 5);
+        setTags(topKeywords.join(', '));
+      }
+      
+    } catch (err) {
+      console.error('Content analysis error:', err);
+      // Non-critical, so don't show error to user
+    } finally {
+      setIsAiAnalyzing(false);
+    }
+  };
 
   // Handle cover image selection
   const handleCoverImageChange = (e) => {
@@ -123,17 +232,28 @@ const handleFileChange = async (e) => {
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
       
+      // Prepare metadata object with AI-extracted information
+      const metadataObj = {
+        title,
+        author,
+        description,
+        coverURL: coverImageUrl,
+        tags: tagArray,
+        private: isPrivate,
+        extractionMethods: extractionMethods,
+        contentFeatures: contentFeatures,
+        aiAnalysisComplete: aiAnalysisComplete
+      };
+      
+      // Add detected content type if available
+      if (detectedContentType) {
+        metadataObj.detectedContentType = detectedContentType;
+      }
+      
       // Upload book
       const bookData = await uploadBook(
         file,
-        {
-          title,
-          author,
-          description,
-          coverURL: coverImageUrl,
-          tags: tagArray,
-          private: isPrivate
-        },
+        metadataObj,
         currentUser.uid,
         (progress) => {
           setUploadProgress(progress);
@@ -171,7 +291,7 @@ const handleFileChange = async (e) => {
             <div className="file-upload mb-4">
               <h3>EPUB File</h3>
               <div 
-                className={`file-drop-zone ${file ? 'has-file' : ''} ${isMetadataLoading ? 'loading' : ''}`}
+                className={`file-drop-zone ${file ? 'has-file' : ''} ${isMetadataLoading || isAiAnalyzing ? 'loading' : ''}`}
                 onClick={() => fileInputRef.current.click()}
               >
                 <input
@@ -193,6 +313,14 @@ const handleFileChange = async (e) => {
                     <Loading />
                     <p className="mt-2">Extracting metadata...</p>
                   </div>
+                ) : isAiAnalyzing ? (
+                  <div className="file-loading">
+                    <div className="ai-analyzing">
+                      <FiCpu size={24} color="#4361ee" />
+                      <div className="loader-pulse"></div>
+                    </div>
+                    <p className="mt-2">AI analyzing content...</p>
+                  </div>
                 ) : (
                   <div className="file-info">
                     <p className="file-name">{fileName}</p>
@@ -205,6 +333,18 @@ const handleFileChange = async (e) => {
                       </div>
                     )}
                     
+                    {aiAnalysisComplete && (
+                      <div className="ai-analysis-badge">
+                        <FiCpu className="text-primary" />
+                        <span>AI content analysis complete</span>
+                        {detectedContentType && (
+                          <span className="content-type-badge">
+                            Detected: {detectedContentType}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
                     <button 
                       type="button" 
                       className="remove-file"
@@ -213,6 +353,7 @@ const handleFileChange = async (e) => {
                         setFile(null);
                         setFileName('');
                         setMetadataExtracted(false);
+                        setAiAnalysisComplete(false);
                       }}
                     >
                       <FiX />
@@ -220,6 +361,28 @@ const handleFileChange = async (e) => {
                   </div>
                 )}
               </div>
+              
+              {/* AI analysis toggle */}
+              {file && !isMetadataLoading && (
+                <div className="ai-toggle">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isAiAnalysisEnabled}
+                      onChange={(e) => setIsAiAnalysisEnabled(e.target.checked)}
+                    />
+                    <span>Enable AI content analysis for better recommendations</span>
+                    
+                    <button 
+                      type="button"
+                      className="info-button-small"
+                      title="AI analyzes your book's content to provide better recommendations and automatically detect genres"
+                    >
+                      <FiInfo size={14} />
+                    </button>
+                  </label>
+                </div>
+              )}
             </div>
           
             <div className="book-metadata">
@@ -273,7 +436,8 @@ const handleFileChange = async (e) => {
               <div className="form-group">
                 <label htmlFor="tags">
                   Tags
-                  {metadataExtracted && tags && <span className="metadata-label"><FiInfo size={16} /> Auto-filled</span>}
+                  {aiAnalysisComplete && contentFeatures && contentFeatures.keywords.length > 0 && 
+                    <span className="metadata-label"><FiCpu size={16} /> AI-suggested</span>}
                 </label>
                 <input
                   type="text"
@@ -281,7 +445,7 @@ const handleFileChange = async (e) => {
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
                   placeholder="Enter tags separated by commas"
-                  className={metadataExtracted && tags ? "metadata-field" : ""}
+                  className={aiAnalysisComplete && contentFeatures ? "ai-field" : ""}
                 />
               </div>
               
@@ -355,8 +519,56 @@ const handleFileChange = async (e) => {
             {metadataExtracted && (
               <div className="metadata-info-box">
                 <h4><FiInfo /> About Metadata</h4>
-                <p>The information above was automatically extracted from your EPUB file. You can edit any field if needed.</p>
-                <p>Additional data like ISBN, language, and publisher will be stored with your book to improve recommendations.</p>
+                <p>The information above was automatically extracted from your EPUB file using AI and metadata analysis.</p>
+                <p>You can edit any field if needed.</p>
+                {extractionMethods.length > 0 && (
+                  <div className="extraction-methods">
+                    <p>Extraction methods used:</p>
+                    <ul>
+                      {extractionMethods.map((method, index) => (
+                        <li key={index}>{method.replace(/_/g, ' ')}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {aiAnalysisComplete && contentFeatures && (
+              <div className="ai-analysis-box">
+                <h4><FiCpu /> AI Content Analysis</h4>
+                <p>Our AI analyzed your book's content to provide better recommendations.</p>
+                
+                {contentFeatures.categories.length > 0 && (
+                  <div className="content-categories">
+                    <p>Detected categories:</p>
+                    <div className="category-tags">
+                      {contentFeatures.categories.map((category, index) => (
+                        <span className="category-tag" key={index}>{category}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {contentFeatures.keywords.length > 0 && (
+                  <div className="content-keywords">
+                    <p>Top keywords:</p>
+                    <div className="keyword-cloud">
+                      {contentFeatures.keywords.slice(0, 10).map((keyword, index) => (
+                        <span 
+                          className="keyword-tag" 
+                          key={index}
+                          style={{ 
+                            fontSize: `${Math.max(12, 14 - index * 0.5)}px`,
+                            opacity: Math.max(0.6, 1 - index * 0.05)
+                          }}
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -392,7 +604,134 @@ const handleFileChange = async (e) => {
           </button>
         </div>
       </form>
-    </div>
+      
+      {/* Additional styles for new components */}
+      <style jsx>{`
+        .ai-field {
+          border-left: 3px solid #4361ee !important;
+          background-color: rgba(67, 97, 238, 0.05);
+        }
+        
+        .ai-toggle {
+          margin-top: 10px;
+          display: flex;
+          align-items: center;
+        }
+        
+        .info-button-small {
+          background: none;
+          border: none;
+          color: #4361ee;
+          padding: 0;
+          margin-left: 4px;
+          cursor: pointer;
+        }
+        
+        .ai-analyzing {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        
+        .loader-pulse {
+          width: 40px;
+          height: 4px;
+          background-color: #4361ee;
+          border-radius: 2px;
+          margin-top: 8px;
+          animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+          0% { opacity: 0.3; }
+          50% { opacity: 1; }
+          100% { opacity: 0.3; }
+        }
+        
+        .ai-analysis-badge {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 8px;
+          font-size: 14px;
+          color: #4361ee;
+        }
+        
+        .content-type-badge {
+          background-color: #4361ee;
+          color: white;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 12px;
+          margin-left: 6px;
+        }
+        
+        .ai-analysis-box {
+          margin-top: 20px;
+          padding: 16px;
+          background-color: rgba(67, 97, 238, 0.05);
+          border-radius: 8px;
+          border-left: 3px solid #4361ee;
+        }
+        
+        .ai-analysis-box h4 {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+          color: #4361ee;
+        }
+        
+        .content-categories,
+        .content-keywords {
+          margin-top: 12px;
+        }
+        
+        .category-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 6px;
+        }
+        
+        .category-tag {
+          background-color: #4361ee;
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        
+        .keyword-cloud {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 6px;
+        }
+        
+        .keyword-tag {
+          background-color: #f0f0f0;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        
+        .extraction-methods {
+          margin-top: 12px;
+        }
+        
+        .extraction-methods ul {
+          margin-top: 4px;
+          padding-left: 20px;
+          font-size: 12px;
+        }
+        
+        .extraction-methods li {
+          margin-bottom: 2px;
+        }
+      `}</style>
+  </div>
   );
 };
 
