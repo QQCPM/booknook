@@ -17,6 +17,7 @@ Note Management: View, edit, and navigate through your handwritten notes
 Bookmarking: Mark and return to your favorite passages
 Search Functionality: Find books quickly in your growing library
 Responsive Design: Works seamlessly on desktop and mobile devices
+Informational pages: Learn more on the new About and Contact pages
 
 💻 Technologies Used
 

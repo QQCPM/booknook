@@ -1,0 +1,29 @@
+.contact-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--spacing-lg) var(--spacing-md);
+}
+
+.contact-page h1 {
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-3xl);
+  text-align: center;
+}
+
+.contact-page form {
+  margin-top: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.contact-page input,
+.contact-page textarea {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid #ddd;
+  border-radius: var(--border-radius-md);
+}
+
+.contact-page button {
+  align-self: flex-start;
+}
