@@ -4,6 +4,8 @@ import PrivateRoute from './components/Auth/PrivateRoute';
 
 // Public pages
 import Home from './pages/Home';
+import About from './pages/About';
+import Contact from './pages/Contact';
 import Login from './components/Auth/Login';
 import Signup from './components/Auth/Signup';
 
@@ -21,6 +23,8 @@ const AppRoutes = () => {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/contact" element={<Contact />} />
       
       {/* Protected routes */}
       <Route element={<PrivateRoute />}>

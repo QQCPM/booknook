@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiMenu, FiUser, FiLogOut, FiUpload, FiHome, FiX, FiBook } from 'react-icons/fi';
+import { FiMenu, FiUser, FiLogOut, FiUpload, FiHome, FiX, FiBook, FiMail } from 'react-icons/fi';
 import { logoutUser } from '../../services/authService';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -38,6 +38,8 @@ const Navbar = () => {
               <Link to="/upload" className="nav-item">
                 Upload
               </Link>
+              <Link to="/about" className="nav-item">About</Link>
+              <Link to="/contact" className="nav-item">Contact</Link>
             </div>
             
             <div className="navbar-auth">
@@ -101,16 +103,32 @@ const Navbar = () => {
                     <FiHome />
                     <span>Library</span>
                   </Link>
-                  <Link 
-                    to="/upload" 
+                  <Link
+                    to="/upload"
                     className="mobile-menu-item"
                     onClick={() => setShowMobileMenu(false)}
                   >
                     <FiUpload />
                     <span>Upload Book</span>
                   </Link>
-                  <Link 
-                    to="/profile" 
+                  <Link
+                    to="/about"
+                    className="mobile-menu-item"
+                    onClick={() => setShowMobileMenu(false)}
+                  >
+                    <FiBook />
+                    <span>About</span>
+                  </Link>
+                  <Link
+                    to="/contact"
+                    className="mobile-menu-item"
+                    onClick={() => setShowMobileMenu(false)}
+                  >
+                    <FiMail />
+                    <span>Contact</span>
+                  </Link>
+                  <Link
+                    to="/profile"
                     className="mobile-menu-item"
                     onClick={() => setShowMobileMenu(false)}
                   >
@@ -132,14 +150,20 @@ const Navbar = () => {
             )}
           </>
         ) : (
-          <div className="navbar-auth">
-            <Link to="/login" className="btn btn-link">
-              Sign In
-            </Link>
-            <Link to="/signup" className="btn btn-primary">
-              Sign Up
-            </Link>
-          </div>
+          <>
+            <div className="navbar-menu">
+              <Link to="/about" className="nav-item">About</Link>
+              <Link to="/contact" className="nav-item">Contact</Link>
+            </div>
+            <div className="navbar-auth">
+              <Link to="/login" className="btn btn-link">
+                Sign In
+              </Link>
+              <Link to="/signup" className="btn btn-primary">
+                Sign Up
+              </Link>
+            </div>
+          </>
         )}
       </div>
     </nav>

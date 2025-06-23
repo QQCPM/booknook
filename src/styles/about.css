@@ -1,0 +1,16 @@
+.about-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--spacing-lg) var(--spacing-md);
+}
+
+.about-page h1 {
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-3xl);
+  text-align: center;
+}
+
+.about-page p {
+  margin-bottom: var(--spacing-md);
+  line-height: 1.6;
+}
